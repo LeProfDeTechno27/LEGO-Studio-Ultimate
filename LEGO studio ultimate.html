@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LEGO Studio Infinite</title>
+    <style>
+        :root { --bg: #1a1a1a; --panel: rgba(30,30,30,0.95); --acc: #0078d7; --dang: #d93025; --txt: #eee; }
+        body { margin:0; overflow:hidden; font-family:'Segoe UI',sans-serif; background:var(--bg); color:var(--txt); }
+        #canvas-container { width:100vw; height:100vh; }
+
+        .ui-panel {
+            position:absolute; background:var(--panel); backdrop-filter:blur(10px);
+            padding:12px; border-radius:8px; border:1px solid #444;
+            display:flex; flex-direction:column; gap:8px; max-height:92vh; overflow-y:auto;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        #left-panel { top:15px; left:15px; width:320px; }
+        #right-panel { top:15px; right:15px; width:200px; }
+        #info { bottom:15px; left:15px; pointer-events:none; background:none; border:none; box-shadow:none; text-shadow:1px 1px 2px #000; }
+
+        /* UI Components */
+        h3 { margin:8px 0 4px; font-size:11px; text-transform:uppercase; color:#888; border-bottom:1px solid #444; }
+        .row { display:flex; gap:5px; }
+        button { flex:1; background:#444; color:#fff; border:none; padding:8px; border-radius:4px; cursor:pointer; font-weight:600; font-size:12px; }
+        button:hover { background:#555; }
+        button.active { background:var(--acc); }
+        button.danger { background:var(--dang); }
+        
+        select, input { background:#222; color:#fff; border:1px solid #444; padding:6px; border-radius:4px; width:100%; box-sizing:border-box; }
+        input[type="color"] { height:30px; padding:0; cursor:pointer; }
+        
+        /* Color Grid */
+        .c-grid { display:grid; grid-template-columns:repeat(8,1fr); gap:3px; margin-bottom:5px; }
+        .c-btn { aspect-ratio:1; border-radius:3px; cursor:pointer; border:1px solid transparent; }
+        .c-btn:hover { transform:scale(1.2); z-index:10; }
+        .c-btn.sel { border-color:#fff; transform:scale(1.2); box-shadow:0 2px 5px #000; }
+
+        /* Custom Input Group */
+        .input-group { display:flex; gap:5px; align-items:center; background:#222; padding:5px; border-radius:4px; border:1px solid #444; }
+        .input-group input { border:none; text-align:center; }
+        
+        ::-webkit-scrollbar { width:5px; }
+        ::-webkit-scrollbar-thumb { background:#555; border-radius:2px; }
+    </style>
+    <script type="importmap">
+        { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/" } }
+    </script>
+</head>
+<body>
+
+<div id="canvas-container"></div>
+
+<!-- Left Panel: Library & Build -->
+<div id="left-panel" class="ui-panel">
+    <div class="row">
+        <button id="mode-build" class="active">BUILD TOOL</button>
+        <button id="mode-delete" class="danger">DELETE TOOL</button>
+    </div>
+
+    <!-- Generator -->
+    <h3>Custom Part Generator</h3>
+    <div class="input-group">
+        <select id="gen-type" style="flex:2">
+            <option value="std">Brick</option>
+            <option value="plate">Plate</option>
+            <option value="tile">Tile</option>
+            <option value="technic">Technic Brick</option>
+        </select>
+        <input type="number" id="gen-w" value="1" min="1" max="50" style="flex:1" placeholder="W">
+        <span style="color:#666">x</span>
+        <input type="number" id="gen-d" value="8" min="1" max="50" style="flex:1" placeholder="D">
+        <button id="btn-gen" style="flex:1">USE</button>
+    </div>
+
+    <!-- Library -->
+    <h3>Standard Library</h3>
+    <select id="brick-select">
+        <optgroup label="Essential Bricks">
+            <option value="std_2x4" selected>2x4 Brick</option>
+            <option value="std_2x2">2x2 Brick</option>
+            <option value="std_1x1">1x1 Brick</option>
+            <option value="std_1x2">1x2 Brick</option>
+            <option value="std_1x4">1x4 Brick</option>
+            <option value="std_1x8">1x8 Brick</option>
+        </optgroup>
+        <optgroup label="Plates (Thin)">
+            <option value="plate_1x1">1x1 Plate</option>
+            <option value="plate_1x2">1x2 Plate</option>
+            <option value="plate_2x2">2x2 Plate</option>
+            <option value="plate_2x4">2x4 Plate</option>
+            <option value="plate_4x4">4x4 Plate</option>
+            <option value="plate_6x6">6x6 Plate</option>
+            <option value="base_32x32">32x32 Baseplate</option>
+        </optgroup>
+        <optgroup label="Slopes (Roofing)">
+            <option value="slope_2x2">2x2 Slope (45°)</option>
+            <option value="slope_2x1">2x1 Slope (45°)</option>
+            <option value="slope_3x1">3x1 Slope (33°)</option>
+            <option value="cheese_1x1">1x1 Cheese Slope</option>
+            <option value="slope_inv_2x2">2x2 Inverted</option>
+        </optgroup>
+        <optgroup label="Curved Slopes (Smooth)">
+            <option value="curve_2x1">1x2 Curved Slope</option>
+            <option value="curve_2x2">2x2 Curved Slope</option>
+            <option value="curve_arch_1x3">1x3 Curved Arch</option>
+        </optgroup>
+        <optgroup label="SNOT & Modified">
+            <option value="snot_1x1">1x1 Headlight Brick</option>
+            <option value="bracket_1x2">1x2 - 2x2 Bracket</option>
+            <option value="masonry_1x2">1x2 Masonry Profile</option>
+        </optgroup>
+        <optgroup label="Special & Nature">
+            <option value="round_1x1">1x1 Round Brick</option>
+            <option value="cone_1x1">1x1 Cone</option>
+            <option value="plant_flower">Flower</option>
+            <option value="plant_bamboo">Bamboo Leaf</option>
+            <option value="window_1x4x3">Window 1x4x3</option>
+        </optgroup>
+    </select>
+
+    <h3>Palette</h3>
+    <div id="palette-solid" class="c-grid"></div>
+    <h3>Special Materials</h3>
+    <div id="palette-special" class="c-grid"></div>
+</div>
+
+<!-- Right Panel: Scene -->
+<div id="right-panel" class="ui-panel">
+    <h3>Actions</h3>
+    <button id="btn-rotate">ROTATE [R]</button>
+    <div class="row">
+        <button id="btn-save">SAVE</button>
+        <button id="btn-load">LOAD</button>
+    </div>
+    <button id="btn-clear" class="danger" style="margin-top:5px">CLEAR ALL</button>
+    <input type="file" id="file-input" hidden accept=".json">
+
+    <h3>Scene</h3>
+    <label>Bg <input type="color" id="col-bg" value="#222222"></label>
+    <label>Floor <input type="color" id="col-floor" value="#333333"></label>
+    <label>Grid <input type="checkbox" id="chk-grid" checked></label>
+</div>
+
+<div id="info" class="ui-panel">
+    Controls: Click to Place | Right-Click Orbit | [R] Rotate | [D] Delete Mode
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// --- CONFIG ---
+const U = 20; // Unit width
+const H_B = 24; // Brick Height
+const H_P = 8;  // Plate Height
+const EPS = 0.05; // Gap for realism
+
+// Official LEGO Palette (Subset)
+const PALETTE = [
+    {h:0xC91A09,n:"Red",t:'s'}, {h:0x0055BF,n:"Blue",t:'s'}, {h:0xF2CD37,n:"Yellow",t:'s'}, 
+    {h:0x237841,n:"Green",t:'s'}, {h:0xF2F3F3,n:"White",t:'s'}, {h:0x1B2A34,n:"Black",t:'s'},
+    {h:0xA0A5A9,n:"L.Grey",t:'s'}, {h:0x6C6E68,n:"D.Grey",t:'s'}, {h:0x582A12,n:"Brown",t:'s'},
+    {h:0xE4CD9E,n:"Tan",t:'s'}, {h:0x9B9A5A,n:"Sand Grn",t:'s'}, {h:0xBBE90B,n:"Lime",t:'s'},
+    {h:0x4B9F4A,n:"Brt Grn",t:'s'}, {h:0x352100,n:"Dk Brwn",t:'s'}, {h:0xAA7D55,n:"Dk Tan",t:'s'},
+    {h:0xDBAC34,n:"Gold",t:'m'}, {h:0x898788,n:"Silver",t:'m'}, 
+    {h:0xADC3C0,n:"Tr.Clear",t:'t'}, {h:0xC91A09,n:"Tr.Red",t:'t'}, {h:0x0055BF,n:"Tr.Blue",t:'t'}
+];
+
+// --- STATE ---
+const state = {
+    mode: 'build', cIdx: 0, rot: 0,
+    type: 'std', w: 2, d: 4, h: 24, cat: 'std', // Current brush
+    ghost: null, bricks: [],
+    settings: { bg: '#222222', floor: '#333333' }
+};
+
+// --- THREE JS SETUP ---
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(state.settings.bg);
+scene.fog = new THREE.Fog(state.settings.bg, 500, 4000);
+
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 1, 8000);
+camera.position.set(400, 500, 400);
+
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.maxPolarAngle = Math.PI/2 - 0.02;
+controls.enableDamping = true;
+
+// Lights
+const hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 0.6);
+scene.add(hemi);
+const dir = new THREE.DirectionalLight(0xffffff, 1.2);
+dir.position.set(300, 500, 200);
+dir.castShadow = true;
+dir.shadow.mapSize.set(2048,2048);
+scene.add(dir);
+
+// Floor
+const grid = new THREE.GridHelper(3000, 150, 0x555555, 0x333333);
+scene.add(grid);
+const plane = new THREE.Mesh(new THREE.PlaneGeometry(5000,5000), new THREE.MeshStandardMaterial({color:state.settings.floor, roughness:1}));
+plane.rotation.x = -Math.PI/2;
+plane.position.y = -0.1;
+plane.receiveShadow = true;
+plane.name = 'ground';
+scene.add(plane);
+
+// --- GEOMETRY ENGINE ---
+
+// Materials
+function getMat(idx, ghost) {
+    const p = PALETTE[idx];
+    const opts = { color: p.h };
+    if(ghost) { opts.opacity=0.5; opts.transparent=true; }
+    else if(p.t === 't') { opts.opacity=0.6; opts.transparent=true; opts.roughness=0.1; }
+    else if(p.t === 'm') { opts.metalness=0.7; opts.roughness=0.3; }
+    else { opts.roughness=0.2; }
+    return new THREE.MeshStandardMaterial(opts);
+}
+
+// Helper Geometries
+const STUD_GEO = new THREE.CylinderGeometry(3,3,4,16); STUD_GEO.translate(0,2,0);
+const STUD_HOLLOW_GEO = new THREE.CylinderGeometry(3,3,4,16); // Actually just render solid for perf, texture handles details usually
+
+function createMesh(data, cIdx, isGhost) {
+    const group = new THREE.Group();
+    const mat = getMat(cIdx, isGhost);
+    const { cat, w, d, h } = data;
+    const uW = w*U; const uD = d*U;
+    
+    let mesh;
+
+    // --- GEOMETRY GENERATION ---
+    
+    if (cat === 'std' || cat === 'plate' || cat === 'tile' || cat === 'technic' || cat === 'base') {
+        // Basic Box
+        const g = new THREE.BoxGeometry(uW-0.2, h, uD-0.2);
+        g.translate(0, h/2, 0);
+        mesh = new THREE.Mesh(g, mat);
+        
+        // Technic Holes (Visual only - simulated with black circles texture if we had one, here just geometry)
+        if(cat === 'technic') {
+            // Add holes on side
+            for(let i=0; i<w-1; i++) {
+                // Simplified: Just simple indented cylinders
+                const hole = new THREE.Mesh(new THREE.CylinderGeometry(2.5,2.5,uD,8), new THREE.MeshStandardMaterial({color:0x111111}));
+                hole.rotation.x = Math.PI/2;
+                hole.position.set((-uW/2) + U + i*U, h/2, 0);
+                mesh.add(hole);
+            }
+        }
+        
+    } else if (cat.includes('slope')) {
+        const shape = new THREE.Shape();
+        if (cat.includes('inv')) {
+            shape.moveTo(0,0); shape.lineTo(uD,0); shape.lineTo(uD,h); shape.lineTo(0,h); shape.lineTo(0,H_P); shape.lineTo(0,0);
+        } else if (cat.includes('cheese')) {
+             shape.moveTo(0,0); shape.lineTo(uD,0); shape.lineTo(0,h); shape.lineTo(0,0);
+        } else {
+            shape.moveTo(0,0); shape.lineTo(uD,0); shape.lineTo(uD,H_P); shape.lineTo(0,h); shape.lineTo(0,0);
+        }
+        const g = new THREE.ExtrudeGeometry(shape, {depth:uW, bevelEnabled:false});
+        g.translate(-uD/2, 0, -uW/2);
+        mesh = new THREE.Mesh(g, mat);
+        mesh.rotation.y = -Math.PI/2;
+
+    } else if (cat.includes('curve')) {
+        const shape = new THREE.Shape();
+        shape.moveTo(0,0); shape.lineTo(uD,0); 
+        if(cat.includes('arch')) {
+            shape.lineTo(uD, h); 
+            shape.quadraticCurveTo(uD/2, h/2, 0, h); // Arch curve
+        } else {
+            shape.lineTo(uD, H_P);
+            shape.bezierCurveTo(uD*0.5, h, 0, h, 0, h); // Convex curve
+        }
+        shape.lineTo(0,0);
+        const g = new THREE.ExtrudeGeometry(shape, {depth:uW, bevelEnabled:false});
+        g.translate(-uD/2, 0, -uW/2);
+        mesh = new THREE.Mesh(g, mat);
+        mesh.rotation.y = -Math.PI/2;
+
+    } else if (cat === 'round' || cat === 'cone') {
+        const r = U/2 - 1;
+        const g = cat==='cone' ? new THREE.CylinderGeometry(3, r, h, 32) : new THREE.CylinderGeometry(r, r, h, 32);
+        g.translate(0, h/2, 0);
+        mesh = new THREE.Mesh(g, mat);
+
+    } else if (cat === 'snot') {
+        // Headlight brick shape (1x1 with indent)
+        const g = new THREE.BoxGeometry(uW-0.2, h, uD-0.2); g.translate(0,h/2,0);
+        mesh = new THREE.Mesh(g, mat);
+        // Side stud
+        const ss = new THREE.Mesh(STUD_GEO, mat);
+        ss.rotation.x = Math.PI/2;
+        ss.position.set(0, h/2, uD/2);
+        mesh.add(ss);
+
+    } else {
+        // Fallback
+        mesh = new THREE.Mesh(new THREE.BoxGeometry(uW, h, uD), mat);
+    }
+
+    mesh.castShadow = !isGhost;
+    mesh.receiveShadow = !isGhost;
+    group.add(mesh);
+
+    // --- STUDS ---
+    if (cat !== 'tile' && cat !== 'cheese' && !cat.includes('curve')) {
+        const studMat = mat;
+        const sx = -(uW/2) + U/2;
+        const sz = -(uD/2) + U/2;
+
+        for(let i=0; i<w; i++) {
+            for(let j=0; j<d; j++) {
+                // Slope Logic: Only studs on flat part
+                let add = true;
+                if(cat.includes('slope') && !cat.includes('inv')) add=false; // Simplified slope logic
+                
+                if(add) {
+                    const s = new THREE.Mesh(STUD_GEO, studMat);
+                    s.position.set(sx + i*U, h, sz + j*U);
+                    group.add(s);
+                }
+            }
+        }
+    }
+    
+    group.userData = { ...data, cIdx };
+    return group;
+}
+
+// --- INTERACTION LOGIC ---
+const ray = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+let objects = [plane];
+
+function parseType(val) {
+    const p = val.split('_');
+    const cat = p[0];
+    let w=1, d=1, h=H_B;
+
+    if(cat === 'gen') {
+         // Values handled by input
+         return { cat: state.cat, w: state.w, d: state.d, h: state.h };
+    }
+
+    if(p[1] && p[1].includes('x')) {
+        const dims = p[1].split('x').map(Number);
+        w=dims[0]; d=dims[1];
+        if(dims[2]) h = dims[2]*8; // e.g. window 1x4x3 (3 bricks high)
+    }
+
+    if(cat === 'plate' || cat === 'base') h=H_P;
+    if(cat === 'tile') h=H_P;
+    if(cat === 'cheese') h=(H_B*2)/3; // rough height
+
+    return { cat, w, d, h };
+}
+
+function updateGhost() {
+    if(state.ghost) { scene.remove(state.ghost); state.ghost = null; }
+    if(state.mode !== 'build') return;
+
+    // Apply Rotation
+    let { cat, w, d, h } = parseType(state.type);
+    
+    // Manual overrides from generator
+    if(state.type === 'custom') {
+        cat = state.cat; w = state.w; d = state.d; h = state.h;
+    }
+
+    // Swap W/D if rotated 90 or 270
+    if(state.rot % 2 !== 0) { [w, d] = [d, w]; }
+
+    const mesh = createMesh({ cat, w, d, h }, state.cIdx, true);
+    // Ignore raycast
+    mesh.traverse(c => c.raycast = () => {});
+    state.ghost = mesh;
+    scene.add(state.ghost);
+}
+
+function onMove(e) {
+    if(state.mode==='delete') { document.body.style.cursor='crosshair'; return; }
+    document.body.style.cursor='default';
+    if(!state.ghost) return;
+
+    mouse.x = (e.clientX/window.innerWidth)*2-1;
+    mouse.y = -(e.clientY/window.innerHeight)*2+1;
+    ray.setFromCamera(mouse, camera);
+    const hits = ray.intersectObjects(objects, true);
+
+    if(hits.length > 0) {
+        let hit = hits[0];
+        let tgt = hit.object;
+        while(tgt.parent && tgt.parent.type==='Group') tgt=tgt.parent;
+
+        const pt = hit.point;
+        const norm = hit.face.normal;
+        
+        // Grid Snap
+        let pos = new THREE.Vector3().copy(pt).add(norm);
+        pos.x = Math.floor(pos.x/U)*U + U/2;
+        pos.z = Math.floor(pos.z/U)*U + U/2;
+
+        // Dim offsets
+        const { w, d } = state.ghost.userData;
+        if(w%2===0) pos.x += U/2;
+        if(d%2===0) pos.z += U/2;
+
+        // Height Snap
+        if(tgt.name === 'ground') pos.y = 0;
+        else {
+            if(norm.y > 0.5) pos.y = tgt.position.y + (tgt.userData.h || H_B);
+            else if(norm.y < -0.5) pos.y = tgt.position.y - state.ghost.userData.h;
+            else pos.y = tgt.position.y;
+        }
+
+        state.ghost.position.copy(pos);
+        state.ghost.visible = true;
+    } else {
+        state.ghost.visible = false;
+    }
+}
+
+function onClick(e) {
+    if(e.button!==0 || e.target.closest('.ui-panel')) return;
+    
+    ray.setFromCamera(mouse, camera);
+    const hits = ray.intersectObjects(objects, true);
+    if(hits.length===0) return;
+
+    let tgt = hits[0].object;
+    while(tgt.parent && tgt.parent.type==='Group') tgt=tgt.parent;
+
+    if(state.mode === 'delete') {
+        if(tgt.name!=='ground') {
+            scene.remove(tgt);
+            state.bricks = state.bricks.filter(b=>b!==tgt);
+            objects = objects.filter(o=>o!==tgt);
+        }
+    } else if(state.ghost && state.ghost.visible) {
+        const data = state.ghost.userData;
+        const mesh = createMesh(data, state.cIdx, false);
+        mesh.position.copy(state.ghost.position);
+        scene.add(mesh);
+        state.bricks.push(mesh);
+        objects.push(mesh);
+    }
+}
+
+// --- UI WIRING ---
+// Color Palette
+const pSol = document.getElementById('palette-solid');
+const pSpec = document.getElementById('palette-special');
+PALETTE.forEach((p, i) => {
+    const b = document.createElement('div');
+    b.className = `c-btn ${i===0?'sel':''}`;
+    b.style.backgroundColor = '#'+p.h.toString(16).padStart(6,'0');
+    b.onclick = () => {
+        document.querySelectorAll('.c-btn').forEach(x=>x.classList.remove('sel'));
+        b.classList.add('sel');
+        state.cIdx = i;
+        updateGhost();
+    };
+    if(p.t==='s') pSol.appendChild(b); else pSpec.appendChild(b);
+});
+
+// Selectors
+document.getElementById('brick-select').onchange = (e) => {
+    state.type = e.target.value;
+    updateGhost();
+};
+
+// Custom Generator
+document.getElementById('btn-gen').onclick = () => {
+    state.type = 'custom';
+    state.cat = document.getElementById('gen-type').value;
+    state.w = parseInt(document.getElementById('gen-w').value);
+    state.d = parseInt(document.getElementById('gen-d').value);
+    state.h = (state.cat==='plate' || state.cat==='tile') ? H_P : H_B;
+    updateGhost();
+};
+
+// Tools
+const btnBuild = document.getElementById('mode-build');
+const btnDel = document.getElementById('mode-delete');
+btnBuild.onclick = () => { state.mode='build'; btnBuild.classList.add('active'); btnDel.classList.remove('active'); };
+btnDel.onclick = () => { state.mode='delete'; btnDel.classList.add('active'); btnBuild.classList.remove('active'); if(state.ghost) state.ghost.visible=false; };
+
+document.getElementById('btn-rotate').onclick = () => { state.rot=(state.rot+1)%4; updateGhost(); };
+window.addEventListener('keydown', (e) => {
+    if(e.key.toLowerCase()==='r') document.getElementById('btn-rotate').click();
+    if(e.key.toLowerCase()==='d') btnDel.click();
+    if(e.key==='Escape') btnBuild.click();
+});
+
+// Scene Colors
+document.getElementById('col-bg').oninput = (e) => { scene.background.set(e.target.value); scene.fog.color.set(e.target.value); };
+document.getElementById('col-floor').oninput = (e) => { plane.material.color.set(e.target.value); };
+document.getElementById('chk-grid').onchange = (e) => { grid.visible = e.target.checked; };
+
+// File I/O
+document.getElementById('btn-clear').onclick = () => {
+    if(confirm('Clear all?')) { state.bricks.forEach(b=>scene.remove(b)); state.bricks=[]; objects=[plane]; }
+};
+document.getElementById('btn-save').onclick = () => {
+    const exp = state.bricks.map(b => ({
+        cat: b.userData.cat, w: b.userData.w, d: b.userData.d, h: b.userData.h,
+        c: b.userData.cIdx, p: b.position.toArray()
+    }));
+    const blob = new Blob([JSON.stringify(exp)], {type:'application/json'});
+    const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='lego.json'; a.click();
+};
+const fIn = document.getElementById('file-input');
+document.getElementById('btn-load').onclick = () => fIn.click();
+fIn.onchange = (e) => {
+    const f = e.target.files[0]; if(!f) return;
+    const r = new FileReader();
+    r.onload = (ev) => {
+        document.getElementById('btn-clear').click();
+        const data = JSON.parse(ev.target.result);
+        data.forEach(d => {
+            const m = createMesh({cat:d.cat, w:d.w, d:d.d, h:d.h}, d.c, false);
+            m.position.fromArray(d.p);
+            scene.add(m); state.bricks.push(m); objects.push(m);
+        });
+    };
+    r.readAsText(f); fIn.value='';
+};
+
+// Loop
+window.addEventListener('resize', ()=>{ camera.aspect=window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth,window.innerHeight); });
+document.addEventListener('mousemove', onMove);
+document.addEventListener('mousedown', onClick);
+
+function anim() { requestAnimationFrame(anim); controls.update(); renderer.render(scene, camera); }
+anim();
+</script>
+</body>
+</html>
