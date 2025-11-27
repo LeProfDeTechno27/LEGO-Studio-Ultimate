@@ -94,16 +94,29 @@ export const useThreeScene = ({ onSelect }: Options) => {
     const scene = sceneRef.current;
     bricks.forEach((brick) => {
       let mesh = meshesRef.current[brick.id];
+      const needsGeometryUpdate = (geometry: THREE.BoxGeometry) => {
+        const { width, height, depth } = geometry.parameters;
+        return width !== brick.scale.x || height !== brick.scale.y || depth !== brick.scale.z;
+      };
+
       if (!mesh) {
         const geometry = new THREE.BoxGeometry(brick.scale.x, brick.scale.y, brick.scale.z);
         const material = new THREE.MeshStandardMaterial({ color: brick.color });
         mesh = new THREE.Mesh(geometry, material);
         meshesRef.current[brick.id] = mesh;
         scene.add(mesh);
+      } else if (mesh.geometry instanceof THREE.BoxGeometry && needsGeometryUpdate(mesh.geometry)) {
+        mesh.geometry.dispose();
+        mesh.geometry = new THREE.BoxGeometry(brick.scale.x, brick.scale.y, brick.scale.z);
       }
+
+      mesh.name = brick.id;
       mesh.position.set(brick.position.x, brick.position.y, brick.position.z);
       mesh.rotation.set(brick.rotation.x, brick.rotation.y, brick.rotation.z);
       mesh.visible = brick.visible;
+
+      const material = mesh.material as THREE.MeshStandardMaterial;
+      material.color.set(brick.color);
     });
     Object.keys(meshesRef.current).forEach((id) => {
       if (!bricks.find((b) => b.id === id)) {
