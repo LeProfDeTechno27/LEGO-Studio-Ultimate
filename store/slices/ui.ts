@@ -7,6 +7,7 @@ interface UiState {
   gridSnap: boolean;
   autosaveAt: string | null;
   status: string;
+  selectedBrickType: string;
 }
 
 const initialState: UiState = {
@@ -14,6 +15,7 @@ const initialState: UiState = {
   gridSnap: true,
   autosaveAt: null,
   status: 'Ready',
+  selectedBrickType: '1x1-brick',
 };
 
 const uiSlice = createSlice({
@@ -32,8 +34,11 @@ const uiSlice = createSlice({
     setStatus: (state, action: PayloadAction<string>) => {
       state.status = action.payload;
     },
+    setSelectedBrickType: (state, action: PayloadAction<string>) => {
+      state.selectedBrickType = action.payload;
+    },
   },
 });
 
-export const { setActiveTool, toggleGridSnap, setAutosave, setStatus } = uiSlice.actions;
+export const { setActiveTool, toggleGridSnap, setAutosave, setStatus, setSelectedBrickType } = uiSlice.actions;
 export default uiSlice.reducer;

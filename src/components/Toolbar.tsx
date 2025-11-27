@@ -1,7 +1,6 @@
-import { useState } from 'react';
 import { useAppDispatch } from '../hooks/useAppDispatch';
 import { useAppSelector } from '../hooks/useAppSelector';
-import { setActiveTool, toggleGridSnap } from '../../store/slices/ui';
+import { setActiveTool, toggleGridSnap, setSelectedBrickType } from '../../store/slices/ui';
 import { brickLibrary } from '../services/brickLibrary';
 
 const tools: { id: 'build' | 'delete' | 'rotate' | 'move' | 'scale' | 'custom'; label: string; shortcut: string }[] = [
@@ -17,7 +16,7 @@ export const Toolbar = () => {
   const dispatch = useAppDispatch();
   const active = useAppSelector((state) => state.ui.activeTool);
   const gridSnap = useAppSelector((state) => state.ui.gridSnap);
-  const [selectedBrickType, setSelectedBrickType] = useState(brickLibrary[0].id);
+  const selectedBrickType = useAppSelector((state) => state.ui.selectedBrickType);
 
   // Group bricks by category
   const bricksByCategory = brickLibrary.reduce((acc, brick) => {
@@ -47,7 +46,7 @@ export const Toolbar = () => {
         <div className="text-xs font-semibold opacity-70">Brick Type</div>
         <select
           value={selectedBrickType}
-          onChange={(e) => setSelectedBrickType(e.target.value)}
+          onChange={(e) => dispatch(setSelectedBrickType(e.target.value))}
           className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs"
         >
           {Object.entries(bricksByCategory).map(([category, bricks]) => (
