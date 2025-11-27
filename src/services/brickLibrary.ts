@@ -1,0 +1,38 @@
+import { BrickDefinition } from '../types';
+
+export const brickLibrary: BrickDefinition[] = [
+  { id: '1x1-brick', name: 'Brick 1x1', category: 'brick', size: { x: 1, y: 1, z: 1 } },
+  { id: '1x2-brick', name: 'Brick 1x2', category: 'brick', size: { x: 2, y: 1, z: 1 } },
+  { id: '1x4-brick', name: 'Brick 1x4', category: 'brick', size: { x: 4, y: 1, z: 1 } },
+  { id: '1x8-brick', name: 'Brick 1x8', category: 'brick', size: { x: 8, y: 1, z: 1 } },
+  { id: '2x2-brick', name: 'Brick 2x2', category: 'brick', size: { x: 2, y: 2, z: 1 } },
+  { id: '2x4-brick', name: 'Brick 2x4', category: 'brick', size: { x: 4, y: 2, z: 1 } },
+  { id: '1x1-plate', name: 'Plate 1x1', category: 'plate', size: { x: 1, y: 1, z: 0.33 } },
+  { id: '1x2-plate', name: 'Plate 1x2', category: 'plate', size: { x: 2, y: 1, z: 0.33 } },
+  { id: '2x2-plate', name: 'Plate 2x2', category: 'plate', size: { x: 2, y: 2, z: 0.33 } },
+  { id: '2x4-plate', name: 'Plate 2x4', category: 'plate', size: { x: 4, y: 2, z: 0.33 } },
+  { id: '4x4-plate', name: 'Plate 4x4', category: 'plate', size: { x: 4, y: 4, z: 0.33 } },
+  { id: '6x6-plate', name: 'Plate 6x6', category: 'plate', size: { x: 6, y: 6, z: 0.33 } },
+  { id: '32x32-base', name: 'Baseplate 32x32', category: 'plate', size: { x: 32, y: 32, z: 0.33 } },
+  { id: 'slope-2x2-45', name: 'Slope 2x2 45', category: 'slope', size: { x: 2, y: 2, z: 1 }, slope: 45 },
+  { id: 'slope-2x1-45', name: 'Slope 2x1 45', category: 'slope', size: { x: 2, y: 1, z: 1 }, slope: 45 },
+  { id: 'slope-3x1-33', name: 'Slope 3x1 33', category: 'slope', size: { x: 3, y: 1, z: 1 }, slope: 33 },
+  { id: 'cheese-1x1', name: 'Cheese Slope 1x1', category: 'slope', size: { x: 1, y: 1, z: 0.66 }, slope: 33 },
+  { id: 'slope-2x2-inv', name: 'Inverted Slope 2x2', category: 'slope', size: { x: 2, y: 2, z: 1 }, inverted: true },
+  { id: 'slope-1x2-curved', name: 'Curved Slope 1x2', category: 'slope', size: { x: 2, y: 1, z: 1 }, curved: true },
+  { id: 'slope-2x2-curved', name: 'Curved Slope 2x2', category: 'slope', size: { x: 2, y: 2, z: 1 }, curved: true },
+  { id: 'arch-1x3', name: 'Arch 1x3 Curved', category: 'special', size: { x: 3, y: 1, z: 2 } },
+  { id: 'headlight', name: 'Headlight Brick', category: 'special', size: { x: 1, y: 1, z: 1 } },
+  { id: 'bracket', name: 'Bracket', category: 'special', size: { x: 1, y: 1, z: 1 } },
+  { id: 'round-1x1', name: 'Round Brick 1x1', category: 'special', size: { x: 1, y: 1, z: 1 } },
+  { id: 'cone', name: 'Cone', category: 'special', size: { x: 1, y: 1, z: 1.5 } },
+  { id: 'window-1x4x3', name: 'Window 1x4x3', category: 'special', size: { x: 4, y: 1, z: 3 } },
+  { id: 'technic-brick', name: 'Technic Brick', category: 'technic', size: { x: 1, y: 1, z: 1 } },
+  { id: 'technic-pin', name: 'Technic Pin', category: 'technic', size: { x: 0.5, y: 0.5, z: 0.5 } },
+  { id: 'technic-connector', name: 'Technic Connector', category: 'technic', size: { x: 1, y: 1, z: 0.5 } },
+  { id: 'flower', name: 'Flower', category: 'accessory', size: { x: 1, y: 1, z: 0.5 } },
+  { id: 'bamboo', name: 'Bamboo Leaf', category: 'accessory', size: { x: 1, y: 1, z: 2 } },
+  { id: 'custom-part', name: 'Custom Part', category: 'accessory', size: { x: 2, y: 2, z: 1 } },
+];
+
+export const defaultColor = '#F2F3F2';
