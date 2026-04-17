@@ -1,14 +1,23 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three-stdlib';
 import { TransformControls } from 'three-stdlib';
-import { BrickInstance } from '../types';
+import { BrickInstance, Vector3 as Vec3 } from '../types';
+
+export type TransformMode = 'translate' | 'rotate' | 'scale';
+
+interface TransformSnapshot {
+  position: Vec3;
+  rotation: Vec3;
+  scale: Vec3;
+}
 
 interface Options {
   onSelect: (id: string | null) => void;
+  onTransformEnd?: (id: string, transform: TransformSnapshot) => void;
 }
 
-export const useThreeScene = ({ onSelect }: Options) => {
+export const useThreeScene = (options: Options) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer>();
   const sceneRef = useRef(new THREE.Scene());
@@ -17,13 +26,20 @@ export const useThreeScene = ({ onSelect }: Options) => {
   const transformRef = useRef<TransformControls>();
   const meshesRef = useRef<Record<string, THREE.Mesh>>({});
 
+  // Keep callbacks fresh without re-running the mount effect. Mounting must
+  // be stable (single canvas, single renderer) even when parents re-render
+  // and pass new inline callback identities.
+  const optionsRef = useRef(options);
+  optionsRef.current = options;
+
   useEffect(() => {
     if (!containerRef.current) return;
-    const width = containerRef.current.clientWidth;
-    const height = containerRef.current.clientHeight;
+    const container = containerRef.current;
+    const width = container.clientWidth;
+    const height = container.clientHeight;
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(width, height);
-    containerRef.current.appendChild(renderer.domElement);
+    container.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
     const camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 1000);
@@ -37,6 +53,17 @@ export const useThreeScene = ({ onSelect }: Options) => {
     const transform = new TransformControls(camera, renderer.domElement);
     transform.addEventListener('dragging-changed', (event) => {
       controls.enabled = !event.value;
+      if (event.value === false) {
+        const mesh = transform.object as THREE.Mesh | undefined;
+        const cb = optionsRef.current.onTransformEnd;
+        if (mesh && mesh.name && cb) {
+          cb(mesh.name, {
+            position: { x: mesh.position.x, y: mesh.position.y, z: mesh.position.z },
+            rotation: { x: mesh.rotation.x, y: mesh.rotation.y, z: mesh.rotation.z },
+            scale: { x: mesh.scale.x, y: mesh.scale.y, z: mesh.scale.z },
+          });
+        }
+      }
     });
     sceneRef.current.add(transform);
     transformRef.current = transform;
@@ -58,10 +85,11 @@ export const useThreeScene = ({ onSelect }: Options) => {
       raycaster.setFromCamera(mouse, camera);
       const intersects = raycaster.intersectObjects(Object.values(meshesRef.current));
       if (intersects.length > 0) {
-        const id = Object.entries(meshesRef.current).find(([, mesh]) => mesh === intersects[0].object)?.[0] ?? null;
-        onSelect(id);
+        const id =
+          Object.entries(meshesRef.current).find(([, mesh]) => mesh === intersects[0].object)?.[0] ?? null;
+        optionsRef.current.onSelect(id);
       } else {
-        onSelect(null);
+        optionsRef.current.onSelect(null);
       }
     };
     renderer.domElement.addEventListener('pointerdown', onPointerDown);
@@ -74,23 +102,42 @@ export const useThreeScene = ({ onSelect }: Options) => {
       cameraRef.current.updateProjectionMatrix();
       rendererRef.current.setSize(w, h);
     });
-    resizeObserver.observe(containerRef.current);
+    resizeObserver.observe(container);
 
+    let animationFrame = 0;
     const animate = () => {
-      requestAnimationFrame(animate);
+      animationFrame = requestAnimationFrame(animate);
       controls.update();
       renderer.render(sceneRef.current, camera);
     };
     animate();
 
     return () => {
-      renderer.dispose();
+      cancelAnimationFrame(animationFrame);
       resizeObserver.disconnect();
       renderer.domElement.removeEventListener('pointerdown', onPointerDown);
+      try {
+        transform.detach();
+        transform.dispose();
+      } catch {
+        /* TransformControls older builds may not implement dispose */
+      }
+      sceneRef.current.remove(transform);
+      // IMPORTANT: remove the appended <canvas> element. Without this the
+      // cleanup from a previous mount (StrictMode double-invoke or a parent
+      // re-render passing a new callback identity) leaves an orphan canvas
+      // in the container, stacking dead canvases that swallow clicks.
+      if (renderer.domElement.parentNode) {
+        renderer.domElement.parentNode.removeChild(renderer.domElement);
+      }
+      renderer.dispose();
     };
-  }, [onSelect]);
+    // Run once. Callbacks are read through optionsRef so new inline arrow
+    // identities don't tear down and re-create the renderer.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const syncBricks = (bricks: BrickInstance[]) => {
+  const syncBricks = useCallback((bricks: BrickInstance[]) => {
     const scene = sceneRef.current;
     bricks.forEach((brick) => {
       let mesh = meshesRef.current[brick.id];
@@ -108,9 +155,18 @@ export const useThreeScene = ({ onSelect }: Options) => {
       } else if (mesh.geometry instanceof THREE.BoxGeometry && needsGeometryUpdate(mesh.geometry)) {
         mesh.geometry.dispose();
         mesh.geometry = new THREE.BoxGeometry(brick.scale.x, brick.scale.y, brick.scale.z);
+        // Geometry size now carries the brick's dimensions, so reset the
+        // mesh's local scale to identity (it may have been left non-unit
+        // by a previous TransformControls scale drag).
+        mesh.scale.set(1, 1, 1);
       }
 
       mesh.name = brick.id;
+      // Read primitives off the (possibly frozen) Redux brick. Never assign
+      // brick.position / brick.rotation / brick.scale onto a Three.js
+      // Vector3/Euler via `copy()` or direct assignment — Immer freezes the
+      // payload and the shared reference makes THREE throw
+      // "Cannot assign to read only property 'x'".
       mesh.position.set(brick.position.x, brick.position.y, brick.position.z);
       mesh.rotation.set(brick.rotation.x, brick.rotation.y, brick.rotation.z);
       mesh.visible = brick.visible;
@@ -124,9 +180,9 @@ export const useThreeScene = ({ onSelect }: Options) => {
         delete meshesRef.current[id];
       }
     });
-  };
+  }, []);
 
-  const attachTransform = (brickId: string | null) => {
+  const attachTransform = useCallback((brickId: string | null) => {
     if (!transformRef.current) return;
     if (!brickId) {
       transformRef.current.detach();
@@ -134,7 +190,20 @@ export const useThreeScene = ({ onSelect }: Options) => {
     }
     const mesh = meshesRef.current[brickId];
     if (mesh) transformRef.current.attach(mesh);
-  };
+  }, []);
 
-  return { containerRef, rendererRef, sceneRef, cameraRef, transformRef, syncBricks, attachTransform };
+  const setTransformMode = useCallback((mode: TransformMode) => {
+    transformRef.current?.setMode(mode);
+  }, []);
+
+  return {
+    containerRef,
+    rendererRef,
+    sceneRef,
+    cameraRef,
+    transformRef,
+    syncBricks,
+    attachTransform,
+    setTransformMode,
+  };
 };
