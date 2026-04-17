@@ -15,6 +15,10 @@ interface TransformSnapshot {
 interface Options {
   onSelect: (id: string | null) => void;
   onTransformEnd?: (id: string, transform: TransformSnapshot) => void;
+  // Fired when the user clicks on empty canvas (no brick, no gizmo handle).
+  // The point is in world coordinates, raycast against y = 0.5 so placement
+  // lands on top of the ground plane regardless of camera angle.
+  onPlace?: (worldPosition: Vec3) => void;
 }
 
 export const useThreeScene = (options: Options) => {
@@ -78,7 +82,24 @@ export const useThreeScene = (options: Options) => {
 
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
+    // Placement plane sits at the brick's resting Y (0.5) so single-click
+    // placement lands on top of the floor at any camera angle.
+    const placementPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -0.5);
+    // Only treat a pointerdown/up pair as a click if the pointer barely
+    // moved. This lets users orbit the camera without placing a brick on
+    // mouseup (previous behaviour fired `click` after any drag).
+    let downX = 0;
+    let downY = 0;
+    let downOnGizmo = false;
     const onPointerDown = (event: MouseEvent) => {
+      downX = event.clientX;
+      downY = event.clientY;
+      // If the user is pressing a TransformControls handle, let the gizmo
+      // drive the drag. Without this guard the raycast-miss branch below
+      // would deselect the brick, detaching the gizmo before it can
+      // process the drag.
+      downOnGizmo = Boolean(transform.axis);
+      if (downOnGizmo) return;
       const bounds = renderer.domElement.getBoundingClientRect();
       mouse.x = ((event.clientX - bounds.left) / bounds.width) * 2 - 1;
       mouse.y = -((event.clientY - bounds.top) / bounds.height) * 2 + 1;
@@ -92,7 +113,23 @@ export const useThreeScene = (options: Options) => {
         optionsRef.current.onSelect(null);
       }
     };
+    const onPointerUp = (event: MouseEvent) => {
+      if (downOnGizmo) return;
+      const dx = event.clientX - downX;
+      const dy = event.clientY - downY;
+      if (dx * dx + dy * dy > 25) return; // dragged — treat as orbit, not click
+      const bounds = renderer.domElement.getBoundingClientRect();
+      mouse.x = ((event.clientX - bounds.left) / bounds.width) * 2 - 1;
+      mouse.y = -((event.clientY - bounds.top) / bounds.height) * 2 + 1;
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObjects(Object.values(meshesRef.current));
+      if (intersects.length > 0) return; // click hit an existing brick — don't place
+      const worldPoint = new THREE.Vector3();
+      if (!raycaster.ray.intersectPlane(placementPlane, worldPoint)) return;
+      optionsRef.current.onPlace?.({ x: worldPoint.x, y: worldPoint.y, z: worldPoint.z });
+    };
     renderer.domElement.addEventListener('pointerdown', onPointerDown);
+    renderer.domElement.addEventListener('pointerup', onPointerUp);
 
     const resizeObserver = new ResizeObserver(() => {
       if (!containerRef.current || !cameraRef.current || !rendererRef.current) return;
@@ -116,6 +153,7 @@ export const useThreeScene = (options: Options) => {
       cancelAnimationFrame(animationFrame);
       resizeObserver.disconnect();
       renderer.domElement.removeEventListener('pointerdown', onPointerDown);
+      renderer.domElement.removeEventListener('pointerup', onPointerUp);
       try {
         transform.detach();
         transform.dispose();

@@ -58,6 +58,39 @@ export const Canvas3D = () => {
     [dispatch]
   );
 
+  // Latest tool / dropdown / snap state for the placement callback (which
+  // lives inside useThreeScene's stable mount effect and can't close over
+  // fresh Redux state directly).
+  const activeToolRef = useRef(activeTool);
+  activeToolRef.current = activeTool;
+  const gridSnapRef = useRef(gridSnap);
+  gridSnapRef.current = gridSnap;
+  const selectedBrickTypeRef = useRef(selectedBrickType);
+  selectedBrickTypeRef.current = selectedBrickType;
+
+  const handlePlace = useCallback(
+    (world: Vector3) => {
+      if (activeToolRef.current !== 'build') return;
+      const brickDef =
+        brickLibrary.find((b) => b.id === selectedBrickTypeRef.current) || brickLibrary[0];
+      const raw: Vector3 = { x: world.x, y: 0.5, z: world.z };
+      const position = gridSnapRef.current ? snapVector(raw, 0.5) : raw;
+      dispatch(
+        addBrick({
+          id: uuid(),
+          type: brickDef.id,
+          color: defaultColor,
+          position,
+          rotation: { x: 0, y: 0, z: 0 },
+          scale: { x: brickDef.size.x, y: brickDef.size.z, z: brickDef.size.y },
+          locked: false,
+          visible: true,
+        })
+      );
+    },
+    [dispatch]
+  );
+
   const {
     containerRef,
     rendererRef,
@@ -65,7 +98,11 @@ export const Canvas3D = () => {
     syncBricks,
     attachTransform,
     setTransformMode,
-  } = useThreeScene({ onSelect: handleSelect, onTransformEnd: handleTransformEnd });
+  } = useThreeScene({
+    onSelect: handleSelect,
+    onTransformEnd: handleTransformEnd,
+    onPlace: handlePlace,
+  });
 
   // Keep Three.js in sync with Redux.
   useEffect(() => {
@@ -79,39 +116,16 @@ export const Canvas3D = () => {
     if (mode) setTransformMode(mode);
   }, [activeTool, setTransformMode]);
 
-  // Single-click placement with the current brick type and grid snap.
-  useEffect(() => {
-    const renderer = rendererRef.current;
-    if (!renderer) return;
-    const handler = (event: MouseEvent) => {
-      if (activeTool !== 'build') return;
+  // Placement is now handled by useThreeScene's pointerup callback
+  // (onPlace). It raycasts against a ground plane so the click lands on
+  // the grid at any camera angle, skips gizmo handles, and skips clicks
+  // that already hit an existing brick (so selecting a brick no longer
+  // double-places).
 
-      const brickDef = brickLibrary.find((b) => b.id === selectedBrickType) || brickLibrary[0];
-
-      const bounds = renderer.domElement.getBoundingClientRect();
-      const x = ((event.clientX - bounds.left) / bounds.width - 0.5) * 50;
-      const z = ((event.clientY - bounds.top) / bounds.height - 0.5) * 50;
-      const position = gridSnap ? snapVector({ x, y: 0.5, z }, 0.5) : { x, y: 0.5, z };
-
-      dispatch(
-        addBrick({
-          id: uuid(),
-          type: brickDef.id,
-          color: defaultColor,
-          position,
-          rotation: { x: 0, y: 0, z: 0 },
-          scale: { x: brickDef.size.x, y: brickDef.size.z, z: brickDef.size.y },
-          locked: false,
-          visible: true,
-        })
-      );
-    };
-    renderer.domElement.addEventListener('click', handler);
-    return () => renderer.domElement.removeEventListener('click', handler);
-  }, [rendererRef, dispatch, gridSnap, activeTool, selectedBrickType]);
-
-  // Keep a reference to sceneRef in the closure so TS is happy; no-op otherwise.
+  // Keep a reference to sceneRef / rendererRef in the closure so TS is
+  // happy; no-op otherwise.
   void sceneRef;
+  void rendererRef;
 
   return <div ref={containerRef} className="w-full h-[70vh] rounded-lg overflow-hidden bg-black" />;
 };
