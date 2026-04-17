@@ -82,9 +82,10 @@ export const useThreeScene = (options: Options) => {
 
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
-    // Placement plane sits at the brick's resting Y (0.5) so single-click
-    // placement lands on top of the floor at any camera angle.
-    const placementPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -0.5);
+    // Placement plane is the ground (y = 0). The callback decides the
+    // brick's final Y based on its own height, so plates rest flush on the
+    // grid and tall pieces don't clip through it.
+    const placementPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
     // Only treat a pointerdown/up pair as a click if the pointer barely
     // moved. This lets users orbit the camera without placing a brick on
     // mouseup (previous behaviour fired `click` after any drag).
