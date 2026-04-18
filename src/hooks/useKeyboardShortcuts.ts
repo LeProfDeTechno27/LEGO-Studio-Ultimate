@@ -9,6 +9,20 @@ import { addGroup, removeGroup } from '../../store/slices/scene';
 import { setScene } from '../../store/slices/scene';
 import { storageService } from '../services/storageService';
 import { setProject } from '../../store/slices/project';
+import { uuid } from '../utils/uuid';
+
+// Treat the event as originating from a form control so tool/hotkey shortcuts
+// don't steal keystrokes meant for an <input>, <select>, <textarea>, or any
+// contenteditable region. Previously only input/textarea were guarded, which
+// meant typing letters into the Brick Type dropdown silently switched tools.
+const isEditableTarget = (target: EventTarget | null): boolean => {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target instanceof HTMLInputElement) return true;
+  if (target instanceof HTMLTextAreaElement) return true;
+  if (target instanceof HTMLSelectElement) return true;
+  if (target.isContentEditable) return true;
+  return false;
+};
 
 export const useKeyboardShortcuts = () => {
   const dispatch = useAppDispatch();
@@ -20,117 +34,135 @@ export const useKeyboardShortcuts = () => {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger shortcuts when typing in inputs
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+      if (isEditableTarget(e.target)) return;
+
+      const key = e.key.toLowerCase();
+      const mod = e.ctrlKey || e.metaKey;
+
+      // --- Tool shortcuts (letter-only, no modifier) -----------------------
+      if (!mod && !e.shiftKey) {
+        if (key === 'r') return dispatch(setActiveTool('rotate'));
+        if (key === 'd') return dispatch(setActiveTool('delete'));
+        if (key === 'm') return dispatch(setActiveTool('move'));
+        if (key === 's') return dispatch(setActiveTool('scale'));
+        if (key === 'b') return dispatch(setActiveTool('build'));
+        if (key === 'g') {
+          // Plain G: toggle grid snap. Group is on Ctrl/Shift+G.
+          return dispatch(toggleGridSnap());
+        }
+      }
+
+      // --- Save / Select All / Copy / Paste / Undo / Redo ------------------
+      if (mod && key === 's') {
+        e.preventDefault();
+        const projectFile = { metadata: project, scene };
+        storageService.saveAutosave(projectFile);
+        dispatch(setProject(project));
         return;
       }
 
-      // Tool shortcuts
-      if (e.key === 'r' || e.key === 'R') {
-        dispatch(setActiveTool('rotate'));
-      } else if (e.key === 'd' || e.key === 'D') {
-        dispatch(setActiveTool('delete'));
-      } else if (e.key === 'm' || e.key === 'M') {
-        dispatch(setActiveTool('move'));
-      } else if (e.key === 's' || e.key === 'S') {
-        if (e.ctrlKey || e.metaKey) {
-          // Ctrl+S: Save
-          e.preventDefault();
-          const projectFile = { metadata: project, scene };
-          storageService.saveAutosave(projectFile);
-        } else {
-          dispatch(setActiveTool('scale'));
-        }
-      } else if (e.key === 'b' || e.key === 'B') {
-        dispatch(setActiveTool('build'));
-      }
-
-      // Selection shortcuts
-      else if (e.key === 'Escape') {
-        dispatch(clearSelection());
-      } else if ((e.key === 'a' || e.key === 'A') && (e.ctrlKey || e.metaKey)) {
+      if (mod && key === 'a') {
         e.preventDefault();
         dispatch(setSelection(bricks.map((b) => b.id)));
+        return;
       }
 
-      // Delete selected
-      else if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (selection.length > 0) {
-          e.preventDefault();
-          dispatch(removeBricks(selection));
-          dispatch(clearSelection());
-        }
-      }
-
-      // Copy/Paste
-      else if ((e.key === 'c' || e.key === 'C') && (e.ctrlKey || e.metaKey)) {
+      if (mod && key === 'c') {
         if (selection.length > 0) {
           e.preventDefault();
           const selectedBricks = bricks.filter((b) => selection.includes(b.id));
           localStorage.setItem('lego:clipboard', JSON.stringify(selectedBricks));
         }
-      } else if ((e.key === 'v' || e.key === 'V') && (e.ctrlKey || e.metaKey)) {
+        return;
+      }
+
+      if (mod && key === 'v') {
         e.preventDefault();
         const clipboard = localStorage.getItem('lego:clipboard');
-        if (clipboard) {
-          const copiedBricks = JSON.parse(clipboard);
-          copiedBricks.forEach((brick: any) => {
+        if (!clipboard) return;
+        try {
+          const copiedBricks = JSON.parse(clipboard) as Array<{
+            position: { x: number; y: number; z: number };
+            [k: string]: unknown;
+          }>;
+          copiedBricks.forEach((brick) => {
             dispatch(
               addBrick({
-                ...brick,
-                id: `${brick.id}-copy-${Date.now()}`,
-                position: { x: brick.position.x + 2, y: brick.position.y, z: brick.position.z + 2 },
+                ...(brick as any),
+                // Use a fresh UUID so pastes stay unique even when fired in
+                // rapid succession (previously we templated Date.now() and
+                // collided on sub-ms pastes).
+                id: uuid(),
+                position: {
+                  x: brick.position.x + 2,
+                  y: brick.position.y,
+                  z: brick.position.z + 2,
+                },
+                groupId: undefined,
               })
             );
           });
+        } catch {
+          /* corrupt clipboard — ignore */
         }
+        return;
       }
 
-      // Group/Ungroup
-      else if (e.key === 'g' || e.key === 'G') {
-        if (selection.length > 1) {
-          dispatch(addGroup({ name: `Group ${Date.now()}`, brickIds: selection }));
-        }
-      } else if (e.key === 'u' || e.key === 'U') {
-        const selectedBrick = bricks.find((b) => selection.includes(b.id));
-        if (selectedBrick?.groupId) {
-          dispatch(removeGroup(selectedBrick.groupId));
-        }
-      }
-
-      // Undo/Redo
-      else if ((e.key === 'z' || e.key === 'Z') && (e.ctrlKey || e.metaKey)) {
+      if (mod && key === 'z') {
         e.preventDefault();
         if (e.shiftKey) {
-          // Redo
+          // Ctrl+Shift+Z: Redo (same semantics as Ctrl+Y)
           if (history.redoStack.length > 0) {
             const nextState = history.redoStack[0];
             dispatch(redoAction(scene));
             dispatch(setScene(nextState));
           }
-        } else {
-          // Undo
-          if (history.undoStack.length > 0) {
-            const prevState = history.undoStack[0];
-            dispatch(undoAction(scene));
-            dispatch(setScene(prevState));
-          }
+        } else if (history.undoStack.length > 0) {
+          const prevState = history.undoStack[0];
+          dispatch(undoAction(scene));
+          dispatch(setScene(prevState));
         }
-      } else if ((e.key === 'y' || e.key === 'Y') && (e.ctrlKey || e.metaKey)) {
-        // Ctrl+Y: Redo
+        return;
+      }
+
+      if (mod && key === 'y') {
         e.preventDefault();
         if (history.redoStack.length > 0) {
           const nextState = history.redoStack[0];
           dispatch(redoAction(scene));
           dispatch(setScene(nextState));
         }
+        return;
       }
 
-      // Grid snap toggle
-      else if (e.key === 'g' || e.key === 'G') {
-        if (e.shiftKey) {
-          dispatch(toggleGridSnap());
+      // --- Group / Ungroup -------------------------------------------------
+      // Ctrl+G or Shift+G groups >1 selected bricks. Ctrl+Shift+G ungroups.
+      if (key === 'g' && (mod || e.shiftKey)) {
+        e.preventDefault();
+        if (mod && e.shiftKey) {
+          const selectedBrick = bricks.find((b) => selection.includes(b.id));
+          if (selectedBrick?.groupId) {
+            dispatch(removeGroup(selectedBrick.groupId));
+          }
+        } else if (selection.length > 1) {
+          dispatch(addGroup({ name: `Group ${Date.now()}`, brickIds: selection }));
         }
+        return;
+      }
+
+      // --- Selection / deletion -------------------------------------------
+      if (e.key === 'Escape') {
+        dispatch(clearSelection());
+        return;
+      }
+
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (selection.length > 0) {
+          e.preventDefault();
+          dispatch(removeBricks(selection));
+          dispatch(clearSelection());
+        }
+        return;
       }
     };
 
