@@ -1,10 +1,23 @@
 export type Vector3 = { x: number; y: number; z: number };
 export type Euler = { x: number; y: number; z: number };
 
+export type BrickCategory =
+  | 'brick'
+  | 'plate'
+  | 'tile'
+  | 'slope'
+  | 'round'
+  | 'special'
+  | 'technic'
+  | 'minifig'
+  | 'accessory';
+
 export interface BrickDefinition {
   id: string;
   name: string;
-  category: 'brick' | 'plate' | 'slope' | 'special' | 'technic' | 'accessory';
+  category: BrickCategory;
+  /** Optional finer grouping used by the brick palette (e.g. "1xN", "2xN", "baseplate"). */
+  subcategory?: string;
   size: { x: number; y: number; z: number };
   slope?: number;
   inverted?: boolean;
