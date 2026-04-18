@@ -153,5 +153,5 @@ export const Canvas3D = () => {
   void sceneRef;
   void rendererRef;
 
-  return <div ref={containerRef} className="w-full h-[70vh] rounded-lg overflow-hidden bg-black" />;
+  return <div ref={containerRef} className="w-full h-full min-h-[480px] bg-black" />;
 };
